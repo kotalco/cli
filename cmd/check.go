@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
@@ -19,13 +21,25 @@ var checkCmd = &cobra.Command{
 	Long:  "Checks the underlying cluster is suitable for installing Kotal components",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Check underlying cluster compliance")
-		if _, err := CanCreateKubernetesClient(); err != nil {
+		fmt.Println()
+
+		var client client.Client
+		var err error
+
+		if client, err = CanCreateKubernetesClient(); err != nil {
 			fmt.Printf("❌ can't create Kubernetes client: %s", err)
+			return
 		} else {
 			fmt.Println("✔️ can create Kubernetes client")
 		}
 
-		// Can query Kubernetes API
+		if err = CanQueryKubernetesAPI(client); err != nil {
+			fmt.Printf("❌ can't query Kubernetes API: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can query Kubernetes API")
+		}
+
 		// kotal namespace doesn't exist
 		// Can create Namespaces
 		// Can create ClusterRoles
@@ -64,6 +78,12 @@ func CanCreateKubernetesClient() (client.Client, error) {
 	}
 
 	return client, nil
+}
+
+// CanQueryKubernetesAPI checks if we can query Kubernetes API
+func CanQueryKubernetesAPI(client client.Client) error {
+	pods := corev1.PodList{}
+	return client.List(context.Background(), &pods)
 }
 
 func init() {
