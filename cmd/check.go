@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -48,7 +50,20 @@ var checkCmd = &cobra.Command{
 			fmt.Println("✔️ kotal namespace doesn't exist")
 		}
 
-		// TODO: Can create Namespaces
+		var ns string
+		if ns, err = CanCreateNamespaces(client); err != nil {
+			fmt.Printf("❌ can create namespaces: %s", err)
+		} else {
+			fmt.Println("✔️ can create namespaces")
+		}
+
+		defer func() {
+			key := types.NamespacedName{Name: ns}
+			ns := corev1.Namespace{}
+			client.Get(context.Background(), key, &ns)
+			client.Delete(context.Background(), &ns)
+		}()
+
 		// TODO: Can create ClusterRoles
 		// TODO: Can create ClusterRoleBindings
 		// TODO: Can create CustomResourceDefinitions
@@ -110,6 +125,17 @@ func NamespaceExists(client client.Client) error {
 	}
 
 	return fmt.Errorf("error getting namespace: %w", err)
+}
+
+func CanCreateNamespaces(client client.Client) (string, error) {
+	id := uuid.NewString()
+
+	ns := corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: id,
+		},
+	}
+	return id, client.Create(context.Background(), &ns)
 }
 
 func init() {
