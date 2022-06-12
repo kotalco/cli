@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -46,15 +47,17 @@ var checkCmd = &cobra.Command{
 
 		if err = NamespaceExists(client); err != nil {
 			fmt.Printf("❌ kotal namespace doesn't exists: %s", err)
+			return
 		} else {
 			fmt.Println("✔️ kotal namespace doesn't exist")
 		}
 
 		var ns string
 		if ns, err = CanCreateNamespaces(client); err != nil {
-			fmt.Printf("❌ can create namespaces: %s", err)
+			fmt.Printf("❌ can create Namespaces: %s", err)
+			return
 		} else {
-			fmt.Println("✔️ can create namespaces")
+			fmt.Println("✔️ can create Namespaces")
 		}
 
 		defer func() {
@@ -64,7 +67,13 @@ var checkCmd = &cobra.Command{
 			client.Delete(context.Background(), &ns)
 		}()
 
-		// TODO: Can create ClusterRoles
+		if err = CanCreateClusterRoles(client); err != nil {
+			fmt.Printf("❌ can create ClusterRoles: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create ClusterRoles")
+		}
+
 		// TODO: Can create ClusterRoleBindings
 		// TODO: Can create CustomResourceDefinitions
 		// TODO: can create ServiceAccounts
@@ -136,6 +145,24 @@ func CanCreateNamespaces(client client.Client) (string, error) {
 		},
 	}
 	return id, client.Create(context.Background(), &ns)
+}
+
+func CanCreateClusterRoles(client client.Client) error {
+	id := uuid.NewString()
+	// dummy cluster role
+	role := rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: id,
+		},
+	}
+	defer func() {
+		key := types.NamespacedName{Name: id}
+		role := rbacv1.ClusterRole{}
+		client.Get(context.Background(), key, &role)
+		client.Delete(context.Background(), &role)
+	}()
+	return client.Create(context.Background(), &role)
+
 }
 
 func init() {
