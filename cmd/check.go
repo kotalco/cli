@@ -67,12 +67,27 @@ var checkCmd = &cobra.Command{
 			client.Delete(context.Background(), &ns)
 		}()
 
-		if err = CanCreateClusterRoles(client); err != nil {
+		var role string
+		if role, err = CanCreateClusterRoles(client); err != nil {
 			fmt.Printf("❌ can create ClusterRoles: %s", err)
 			return
 		} else {
 			fmt.Println("✔️ can create ClusterRoles")
 		}
+
+		if err = CanCreateClusterRoleBindings(client, role); err != nil {
+			fmt.Printf("❌ can create ClusterRoleBindings: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create ClusterRoleBindings")
+		}
+
+		defer func() {
+			key := types.NamespacedName{Name: role}
+			role := rbacv1.ClusterRole{}
+			client.Get(context.Background(), key, &role)
+			client.Delete(context.Background(), &role)
+		}()
 
 		// TODO: Can create ClusterRoleBindings
 		// TODO: Can create CustomResourceDefinitions
@@ -147,7 +162,7 @@ func CanCreateNamespaces(client client.Client) (string, error) {
 	return id, client.Create(context.Background(), &ns)
 }
 
-func CanCreateClusterRoles(client client.Client) error {
+func CanCreateClusterRoles(client client.Client) (string, error) {
 	id := uuid.NewString()
 	// dummy cluster role
 	role := rbacv1.ClusterRole{
@@ -155,14 +170,38 @@ func CanCreateClusterRoles(client client.Client) error {
 			Name: id,
 		},
 	}
-	defer func() {
-		key := types.NamespacedName{Name: id}
-		role := rbacv1.ClusterRole{}
-		client.Get(context.Background(), key, &role)
-		client.Delete(context.Background(), &role)
-	}()
-	return client.Create(context.Background(), &role)
+	return id, client.Create(context.Background(), &role)
 
+}
+
+func CanCreateClusterRoleBindings(client client.Client, role string) error {
+	id := uuid.NewString()
+	binding := rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: id,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "default",
+				Namespace: "default",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     role,
+		},
+	}
+
+	defer func() {
+		key := types.NamespacedName{Name: role}
+		binding := rbacv1.ClusterRoleBinding{}
+		client.Get(context.Background(), key, &binding)
+		client.Delete(context.Background(), &binding)
+	}()
+
+	return client.Create(context.Background(), &binding)
 }
 
 func init() {
