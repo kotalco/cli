@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -127,8 +128,13 @@ var checkCmd = &cobra.Command{
 			fmt.Println("✔️ can create Services")
 		}
 
-		// TODO: Can create Services
-		// TODO: Can create Deployments
+		if err = CanCreateDeployments(client, ns); err != nil {
+			fmt.Printf("❌ can create Deployments: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create Deployments")
+		}
+
 		// TODO: Can create Secrets
 		// TODO: Certificate manager is installed
 		// TODO: Can create cert-manager Certificates
@@ -249,8 +255,8 @@ func CanCreateServiceAccounts(client client.Client) (string, error) {
 			Namespace: "default",
 		},
 	}
-	return id, client.Create(context.Background(), &sa)
 
+	return id, client.Create(context.Background(), &sa)
 }
 
 func CanCreateCustomResourceDefinitions(client client.Client) error {
@@ -315,6 +321,39 @@ func CanCreateServices(client client.Client, ns string) error {
 		},
 	}
 	return client.Create(context.Background(), &svc)
+}
+
+func CanCreateDeployments(client client.Client, ns string) error {
+	id := uuid.NewString()
+	sa := appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      id,
+			Namespace: ns,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "box",
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": "box",
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "box",
+							Image: "busybox",
+						},
+					},
+				},
+			},
+		},
+	}
+	return client.Create(context.Background(), &sa)
 }
 
 func init() {
