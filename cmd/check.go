@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -32,9 +34,10 @@ var checkCmd = &cobra.Command{
 		fmt.Println()
 
 		var client client.Client
+		var disclient *discovery.DiscoveryClient
 		var err error
 
-		if client, err = CanCreateKubernetesClient(); err != nil {
+		if client, disclient, err = CanCreateKubernetesClient(); err != nil {
 			fmt.Printf("❌ can create Kubernetes client: %s", err)
 			return
 		} else {
@@ -46,6 +49,13 @@ var checkCmd = &cobra.Command{
 			return
 		} else {
 			fmt.Println("✔️ can query Kubernetes API")
+		}
+
+		if err = MinimumKubernetesVersion(disclient); err != nil {
+			fmt.Printf("❌ is running minimum Kubernetes version: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ is running minimum Kubernetes version")
 		}
 
 		if err = NamespaceExists(client); err != nil {
@@ -142,7 +152,6 @@ var checkCmd = &cobra.Command{
 			fmt.Println("✔️ can create Secrets")
 		}
 
-		// TODO: Can create Secrets
 		// TODO: Certificate manager is installed
 		// TODO: Can create cert-manager Certificates
 		// TODO: Can create cert-manager Issuers
@@ -153,12 +162,12 @@ var checkCmd = &cobra.Command{
 }
 
 // CanCreateKubernetesClient checks if we can create Kubernetes client from config
-func CanCreateKubernetesClient() (client.Client, error) {
+func CanCreateKubernetesClient() (client.Client, *discovery.DiscoveryClient, error) {
 	kubeconfig := filepath.Join(homedir.HomeDir(), ".kube", "config")
 
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
-		return nil, fmt.Errorf("error configuring Kubernetes API client: %w", err)
+		return nil, nil, fmt.Errorf("error configuring Kubernetes API client: %w", err)
 	}
 
 	scheme := runtime.NewScheme()
@@ -170,10 +179,15 @@ func CanCreateKubernetesClient() (client.Client, error) {
 
 	client, err := client.New(config, opts)
 	if err != nil {
-		return nil, fmt.Errorf("error creating new Kubernetes client: %w", err)
+		return nil, nil, fmt.Errorf("error creating new Kubernetes client: %w", err)
 	}
 
-	return client, nil
+	disclient, err := discovery.NewDiscoveryClientForConfig(config)
+	if err != nil {
+		return client, nil, fmt.Errorf("error creating new Kubernetes discovery client: %w", err)
+	}
+
+	return client, disclient, nil
 }
 
 // CanQueryKubernetesAPI checks if we can query Kubernetes API
@@ -374,7 +388,24 @@ func CanCreateSecrets(client client.Client, ns string) error {
 			"secret": "I am Satoshi",
 		},
 	}
+
 	return client.Create(context.Background(), &secret)
+}
+
+func MinimumKubernetesVersion(client *discovery.DiscoveryClient) error {
+	info, err := client.ServerVersion()
+	if err != nil {
+		return fmt.Errorf("error getting server info: %w", err)
+	}
+
+	minor, _ := strconv.Atoi(info.Minor)
+	major, _ := strconv.Atoi(info.Major)
+
+	if major < 1 || minor < 19 {
+		return fmt.Errorf("cluster version is %s, minimum required version is v1.19", info)
+	}
+
+	return nil
 }
 
 func init() {
