@@ -160,10 +160,16 @@ var checkCmd = &cobra.Command{
 			fmt.Println("✔️ can create MutatingWebhookConfiguration")
 		}
 
+		if err = CanCreateValidatingWebhookConfiguration(client); err != nil {
+			fmt.Printf("❌ can create ValidatingWebhookConfiguration: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create ValidatingWebhookConfiguration")
+		}
+
 		// TODO: Certificate manager is installed
 		// TODO: Can create cert-manager Certificates
 		// TODO: Can create cert-manager Issuers
-		// TODO: Can create ValidatingWebhookConfiguration
 
 	},
 }
@@ -427,6 +433,25 @@ func CanCreateMutatingWebhookConfiguration(client client.Client) error {
 	defer func() {
 		key := types.NamespacedName{Name: id}
 		hook := admissionregistrationv1.MutatingWebhookConfiguration{}
+		client.Get(context.Background(), key, &hook)
+		client.Delete(context.Background(), &hook)
+	}()
+
+	return client.Create(context.Background(), &hook)
+}
+
+func CanCreateValidatingWebhookConfiguration(client client.Client) error {
+	id := uuid.NewString()
+	hook := admissionregistrationv1.ValidatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: id,
+		},
+		Webhooks: []admissionregistrationv1.ValidatingWebhook{},
+	}
+
+	defer func() {
+		key := types.NamespacedName{Name: id}
+		hook := admissionregistrationv1.ValidatingWebhookConfiguration{}
 		client.Get(context.Background(), key, &hook)
 		client.Delete(context.Background(), &hook)
 	}()
