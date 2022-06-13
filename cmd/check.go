@@ -135,6 +135,13 @@ var checkCmd = &cobra.Command{
 			fmt.Println("✔️ can create Deployments")
 		}
 
+		if err = CanCreateSecrets(client, ns); err != nil {
+			fmt.Printf("❌ can create Secrets: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create Secrets")
+		}
+
 		// TODO: Can create Secrets
 		// TODO: Certificate manager is installed
 		// TODO: Can create cert-manager Certificates
@@ -354,6 +361,20 @@ func CanCreateDeployments(client client.Client, ns string) error {
 		},
 	}
 	return client.Create(context.Background(), &sa)
+}
+
+func CanCreateSecrets(client client.Client, ns string) error {
+	id := uuid.NewString()
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      id,
+			Namespace: ns,
+		},
+		StringData: map[string]string{
+			"secret": "I am Satoshi",
+		},
+	}
+	return client.Create(context.Background(), &secret)
 }
 
 func init() {
