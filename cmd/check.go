@@ -75,7 +75,15 @@ var checkCmd = &cobra.Command{
 			fmt.Println("✔️ can create ClusterRoles")
 		}
 
-		if err = CanCreateClusterRoleBindings(client, role); err != nil {
+		var account string
+		if account, err = CanCreateServiceAccounts(client); err != nil {
+			fmt.Printf("❌ can create ServiceAccounts: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create ServiceAccounts")
+		}
+
+		if err = CanCreateClusterRoleBindings(client, role, account); err != nil {
 			fmt.Printf("❌ can create ClusterRoleBindings: %s", err)
 			return
 		} else {
@@ -89,9 +97,14 @@ var checkCmd = &cobra.Command{
 			client.Delete(context.Background(), &role)
 		}()
 
-		// TODO: Can create ClusterRoleBindings
+		defer func() {
+			key := types.NamespacedName{Name: account, Namespace: "default"}
+			sa := corev1.ServiceAccount{}
+			client.Get(context.Background(), key, &sa)
+			client.Delete(context.Background(), &sa)
+		}()
+
 		// TODO: Can create CustomResourceDefinitions
-		// TODO: can create ServiceAccounts
 		// TODO: Can create Services
 		// TODO: Can create Deployments
 		// TODO: Can create Secrets
@@ -174,7 +187,7 @@ func CanCreateClusterRoles(client client.Client) (string, error) {
 
 }
 
-func CanCreateClusterRoleBindings(client client.Client, role string) error {
+func CanCreateClusterRoleBindings(client client.Client, role, sa string) error {
 	id := uuid.NewString()
 	binding := rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
@@ -183,7 +196,7 @@ func CanCreateClusterRoleBindings(client client.Client, role string) error {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "default",
+				Name:      sa,
 				Namespace: "default",
 			},
 		},
@@ -202,6 +215,18 @@ func CanCreateClusterRoleBindings(client client.Client, role string) error {
 	}()
 
 	return client.Create(context.Background(), &binding)
+}
+
+func CanCreateServiceAccounts(client client.Client) (string, error) {
+	id := uuid.NewString()
+	sa := corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      id,
+			Namespace: "default",
+		},
+	}
+	return id, client.Create(context.Background(), &sa)
+
 }
 
 func init() {
