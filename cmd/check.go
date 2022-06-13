@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -104,7 +105,20 @@ var checkCmd = &cobra.Command{
 			client.Delete(context.Background(), &sa)
 		}()
 
-		// TODO: Can create CustomResourceDefinitions
+		if err = CanCreateCustomResourceDefinitions(client); err != nil {
+			fmt.Printf("❌ can create CustomResourceDefinitions: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create CustomResourceDefinitions")
+		}
+
+		go func() {
+			key := types.NamespacedName{Name: "checks.cli.kotal.io"}
+			crd := apiextensionsv1.CustomResourceDefinition{}
+			client.Get(context.Background(), key, &crd)
+			client.Delete(context.Background(), &crd)
+		}()
+
 		// TODO: Can create Services
 		// TODO: Can create Deployments
 		// TODO: Can create Secrets
@@ -127,6 +141,8 @@ func CanCreateKubernetesClient() (client.Client, error) {
 	}
 
 	scheme := runtime.NewScheme()
+
+	apiextensionsv1.AddToScheme(scheme)
 	clientgoscheme.AddToScheme(scheme)
 
 	opts := client.Options{Scheme: scheme}
@@ -226,6 +242,50 @@ func CanCreateServiceAccounts(client client.Client) (string, error) {
 		},
 	}
 	return id, client.Create(context.Background(), &sa)
+
+}
+
+func CanCreateCustomResourceDefinitions(client client.Client) error {
+	crd := apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "checks.cli.kotal.io",
+		},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "cli.kotal.io",
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Kind:     "Check",
+				ListKind: "CheckList",
+				Singular: "check",
+				Plural:   "checks",
+			},
+			Scope: apiextensionsv1.NamespaceScoped,
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+				{
+					Name:    "v1",
+					Served:  false,
+					Storage: true,
+					Schema: &apiextensionsv1.CustomResourceValidation{
+						OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
+							Type: "object",
+							Properties: map[string]apiextensionsv1.JSONSchemaProps{
+								"apiVersion": {
+									Type: "string",
+								},
+								"kind": {
+									Type: "string",
+								},
+								"spec": {
+									Type: "object",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return client.Create(context.Background(), &crd)
 
 }
 
