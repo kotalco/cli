@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -152,10 +153,16 @@ var checkCmd = &cobra.Command{
 			fmt.Println("✔️ can create Secrets")
 		}
 
+		if err = CanCreateMutatingWebhookConfiguration(client); err != nil {
+			fmt.Printf("❌ can create MutatingWebhookConfiguration: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create MutatingWebhookConfiguration")
+		}
+
 		// TODO: Certificate manager is installed
 		// TODO: Can create cert-manager Certificates
 		// TODO: Can create cert-manager Issuers
-		// TODO: Can create MutatingWebhookConfiguration
 		// TODO: Can create ValidatingWebhookConfiguration
 
 	},
@@ -406,6 +413,25 @@ func MinimumKubernetesVersion(client *discovery.DiscoveryClient) error {
 	}
 
 	return nil
+}
+
+func CanCreateMutatingWebhookConfiguration(client client.Client) error {
+	id := uuid.NewString()
+	hook := admissionregistrationv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: id,
+		},
+		Webhooks: []admissionregistrationv1.MutatingWebhook{},
+	}
+
+	defer func() {
+		key := types.NamespacedName{Name: id}
+		hook := admissionregistrationv1.MutatingWebhookConfiguration{}
+		client.Get(context.Background(), key, &hook)
+		client.Delete(context.Background(), &hook)
+	}()
+
+	return client.Create(context.Background(), &hook)
 }
 
 func init() {
