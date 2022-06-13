@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -99,7 +100,7 @@ var checkCmd = &cobra.Command{
 		}()
 
 		defer func() {
-			key := types.NamespacedName{Name: account, Namespace: "default"}
+			key := types.NamespacedName{Name: account, Namespace: ns}
 			sa := corev1.ServiceAccount{}
 			client.Get(context.Background(), key, &sa)
 			client.Delete(context.Background(), &sa)
@@ -118,6 +119,13 @@ var checkCmd = &cobra.Command{
 			client.Get(context.Background(), key, &crd)
 			client.Delete(context.Background(), &crd)
 		}()
+
+		if err = CanCreateServices(client, ns); err != nil {
+			fmt.Printf("❌ can create Services: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create Services")
+		}
 
 		// TODO: Can create Services
 		// TODO: Can create Deployments
@@ -287,6 +295,26 @@ func CanCreateCustomResourceDefinitions(client client.Client) error {
 
 	return client.Create(context.Background(), &crd)
 
+}
+
+func CanCreateServices(client client.Client, ns string) error {
+	svc := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dummy",
+			Namespace: ns,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "dummy",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       3000,
+					TargetPort: intstr.IntOrString{IntVal: 3000},
+				},
+			},
+		},
+	}
+	return client.Create(context.Background(), &svc)
 }
 
 func init() {
