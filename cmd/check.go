@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	cmv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -167,6 +168,13 @@ var checkCmd = &cobra.Command{
 			fmt.Println("✔️ can create ValidatingWebhookConfiguration")
 		}
 
+		if err = CertManagerIsInstalled(client); err != nil {
+			fmt.Printf("❌ cert-manager is installed: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ cert-manager is installed")
+		}
+
 		// TODO: Certificate manager is installed
 		// TODO: Can create cert-manager Certificates
 		// TODO: Can create cert-manager Issuers
@@ -187,6 +195,7 @@ func CanCreateKubernetesClient() (client.Client, *discovery.DiscoveryClient, err
 
 	apiextensionsv1.AddToScheme(scheme)
 	clientgoscheme.AddToScheme(scheme)
+	cmv1.AddToScheme(scheme)
 
 	opts := client.Options{Scheme: scheme}
 
@@ -457,6 +466,11 @@ func CanCreateValidatingWebhookConfiguration(client client.Client) error {
 	}()
 
 	return client.Create(context.Background(), &hook)
+}
+
+func CertManagerIsInstalled(client client.Client) error {
+	certs := cmv1.CertificateList{}
+	return client.List(context.Background(), &certs)
 }
 
 func init() {
