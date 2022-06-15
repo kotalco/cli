@@ -175,9 +175,14 @@ var checkCmd = &cobra.Command{
 			fmt.Println("✔️ cert-manager is installed")
 		}
 
-		// TODO: Certificate manager is installed
+		if err = CanCreateCertManagerIssuer(client, ns); err != nil {
+			fmt.Printf("❌ can create cert-manager Issuer: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create cert-manager Issuer")
+		}
+
 		// TODO: Can create cert-manager Certificates
-		// TODO: Can create cert-manager Issuers
 
 	},
 }
@@ -471,6 +476,21 @@ func CanCreateValidatingWebhookConfiguration(client client.Client) error {
 func CertManagerIsInstalled(client client.Client) error {
 	certs := cmv1.CertificateList{}
 	return client.List(context.Background(), &certs)
+}
+
+func CanCreateCertManagerIssuer(client client.Client, ns string) error {
+	issuer := cmv1.Issuer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "self-signer-issuer",
+			Namespace: ns,
+		},
+		Spec: cmv1.IssuerSpec{
+			IssuerConfig: cmv1.IssuerConfig{
+				SelfSigned: &cmv1.SelfSignedIssuer{},
+			},
+		},
+	}
+	return client.Create(context.Background(), &issuer)
 }
 
 func init() {
