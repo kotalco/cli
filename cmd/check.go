@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	cmv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	v1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -155,17 +156,17 @@ var checkCmd = &cobra.Command{
 		}
 
 		if err = CanCreateMutatingWebhookConfiguration(client); err != nil {
-			fmt.Printf("❌ can create MutatingWebhookConfiguration: %s", err)
+			fmt.Printf("❌ can create MutatingWebhookConfigurations: %s", err)
 			return
 		} else {
-			fmt.Println("✔️ can create MutatingWebhookConfiguration")
+			fmt.Println("✔️ can create MutatingWebhookConfigurations")
 		}
 
 		if err = CanCreateValidatingWebhookConfiguration(client); err != nil {
-			fmt.Printf("❌ can create ValidatingWebhookConfiguration: %s", err)
+			fmt.Printf("❌ can create ValidatingWebhookConfigurations: %s", err)
 			return
 		} else {
-			fmt.Println("✔️ can create ValidatingWebhookConfiguration")
+			fmt.Println("✔️ can create ValidatingWebhookConfigurations")
 		}
 
 		if err = CertManagerIsInstalled(client); err != nil {
@@ -176,13 +177,23 @@ var checkCmd = &cobra.Command{
 		}
 
 		if err = CanCreateCertManagerIssuer(client, ns); err != nil {
-			fmt.Printf("❌ can create cert-manager Issuer: %s", err)
+			fmt.Printf("❌ can create cert-manager Issuers: %s", err)
 			return
 		} else {
-			fmt.Println("✔️ can create cert-manager Issuer")
+			fmt.Println("✔️ can create cert-manager Issuers")
 		}
 
-		// TODO: Can create cert-manager Certificates
+		if err = CanCreateCertManagerCertificate(client, ns); err != nil {
+			fmt.Printf("❌ can create cert-manager Certificates: %s", err)
+			return
+		} else {
+			fmt.Println("✔️ can create cert-manager Certificates")
+		}
+
+		// TODO: test cli is up to date
+
+		fmt.Println()
+		fmt.Println("🔥 kotal can be installed")
 
 	},
 }
@@ -491,6 +502,25 @@ func CanCreateCertManagerIssuer(client client.Client, ns string) error {
 		},
 	}
 	return client.Create(context.Background(), &issuer)
+}
+
+func CanCreateCertManagerCertificate(client client.Client, ns string) error {
+	cert := cmv1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "certificate",
+			Namespace: ns,
+		},
+		Spec: cmv1.CertificateSpec{
+			DNSNames: []string{
+				"check.kotal.io",
+			},
+			SecretName: uuid.NewString(),
+			IssuerRef: v1.ObjectReference{
+				Name: "self-signer-issuer",
+			},
+		},
+	}
+	return client.Create(context.Background(), &cert)
 }
 
 func init() {
